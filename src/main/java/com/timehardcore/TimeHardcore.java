@@ -1,7 +1,6 @@
 package com.timehardcore;
 
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
@@ -14,83 +13,166 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class TimeHardcore extends JavaPlugin implements Listener {
 
     private TimeManager timeManager;
-    private static final long HARDCORE_THRESHOLD = 15 * 60 * 60; // 15 годин в секундах
-    private final Map<UUID, BossBar> playerBars = new HashMap<>();
+    private final long HARDCORE_THRESHOLD = 15 * 3600; // 15 годин в секундах
+    private Map<UUID, BossBar> playerBossBars = new HashMap<>();
 
     @Override
     public void onEnable() {
-        timeManager = new TimeManager(this);
-        getServer().getPluginManager().registerEvents(this, this);
+        this.timeManager = new TimeManager(this);
+        
+        getCommand("starttimer").setExecutor(new StartTimerCommand(this, timeManager));
         getCommand("playtime").setExecutor(new PlaytimeCommand(timeManager, HARDCORE_THRESHOLD));
-        getCommand("starttimer").setExecutor(new StartTimerCommand(timeManager, this));
+        getCommand("stoptimer").setExecutor((sender, cmd, label, args) -> {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cТільки гравці можуть це робити!");
+                return true;
+            }
+            Player player = (Player) sender;
+            timeManager.stopTimer(player.getUniqueId());
+            removeBossBar(player.getUniqueId());
+            player.sendMessage("§6Таймер зупинено!");
+            return true;
+        });
 
-        // Тік кожну 1 секунду — рахує час і оновлює BossBar
+        getServer().getPluginManager().registerEvents(this, this);
+        
+        getLogger().info("§6TimeHardcore плагін запущений! (Версія 1.20.1)");
+        startTickerTask();
+    }
+
+    @Override
+    public void onDisable() {
+        // Очистити БоссБари
+        for (BossBar bar : playerBossBars.values()) {
+            bar.removeAll();
+        }
+        playerBossBars.clear();
+        timeManager.saveAll();
+    }
+
+    private void startTickerTask() {
         new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     UUID uuid = player.getUniqueId();
-                    timeManager.addTime(uuid, 1); // +1 секунда
-
-                    long totalSeconds = timeManager.getTime(uuid);
                     
-                    // Оновлюємо BossBar для гравця
-                    updateBossBar(player, uuid, totalSeconds);
-
-                    if (totalSeconds >= HARDCORE_THRESHOLD && player.getGameMode() != GameMode.SPECTATOR) {
-                        if (!timeManager.isHardcore(uuid)) {
-                            timeManager.setHardcore(uuid, true);
-                            activateHardcore(player);
+                    if (timeManager.isTimerRunning(uuid)) {
+                        // Збільшуємо час на 1 секунду
+                        timeManager.addTime(uuid, 1);
+                        long currentTime = timeManager.getTime(uuid);
+                        
+                        // Оновлюємо БоссБар
+                        updateBossBar(player, currentTime);
+                        
+                        // Перевіряємо, чи досягли 15 годин
+                        if (currentTime >= HARDCORE_THRESHOLD && !timeManager.isHardcore(uuid)) {
+                            enableHardcore(player);
                         }
                     }
                 }
-                
-                // Зберігаємо дані кожні 20 тіків (1 секунда)
-                if (Bukkit.getServer().getCurrentTick() % 20 == 0) {
-                    timeManager.save();
-                }
             }
-        }.runTaskTimer(this, 20L, 1L); // кожну секунду (20 тіків = 1 секунда)
-
-        getLogger().info("TimeHardcore увімкнено! Поріг: 15 годин онлайн.");
+        }.runTaskTimer(this, 0L, 20L); // Кожні 1 секунду (20 тіків)
     }
 
-    @Override
-    public void onDisable() {
-        // Видаляємо всі BossBars
-        for (BossBar bar : playerBars.values()) {
-            bar.removeAll();
-        }
-        playerBars.clear();
+    private void updateBossBar(Player player, long seconds) {
+        UUID uuid = player.getUniqueId();
         
-        // Зберігаємо час всіх онлайн гравців перед вимкненням
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            timeManager.save();
+        // Створюємо БоссБар якщо його немає
+        if (!playerBossBars.containsKey(uuid)) {
+            BossBar bar = Bukkit.createBossBar(
+                "⏱ TimeHardcore Таймер",
+                BarColor.GREEN,
+                BarStyle.SOLID
+            );
+            bar.addPlayer(player);
+            playerBossBars.put(uuid, bar);
         }
-        getLogger().info("TimeHardcore вимкнено. Дані збережено.");
+        
+        BossBar bar = playerBossBars.get(uuid);
+        
+        // Розраховуємо прогрес (0.0 - 1.0)
+        double progress = Math.min(1.0, (double) seconds / HARDCORE_THRESHOLD);
+        
+        // Визначаємо колір залежно від прогресу
+        BarColor color;
+        if (progress < 0.5) {
+            color = BarColor.GREEN;
+        } else if (progress < 0.75) {
+            color = BarColor.YELLOW;
+        } else if (progress < 0.9) {
+            color = BarColor.RED; // Використовуємо RED замість ORANGE
+        } else {
+            color = BarColor.RED;
+        }
+        
+        // Оновлюємо вміст БоссБара
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        
+        String title = String.format("⏱ %02d:%02d:%02d / 15:00:00", hours, minutes, secs);
+        
+        if (timeManager.isHardcore(uuid)) {
+            title = "☠ HARDCORE РЕЖИМ! Смерть = БАН ☠";
+            color = BarColor.RED;
+        }
+        
+        bar.setTitle(title);
+        bar.setColor(color);
+        bar.setProgress(progress);
+    }
+
+    private void enableHardcore(Player player) {
+        UUID uuid = player.getUniqueId();
+        timeManager.setHardcore(uuid, true);
+        
+        player.sendTitle(
+            "§c§lHARDCORE РЕЖИМ",
+            "§4Смерть = ПОСТІЙНИЙ БАН!",
+            10, 70, 10
+        );
+        
+        Bukkit.broadcastMessage("§4§l[⚠] " + player.getName() + " §4увійшов в HARDCORE режим!");
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        UUID uuid = player.getUniqueId();
+        
+        if (timeManager.isHardcore(uuid)) {
+            // Забанити гравця назавжди
+            player.setWhitelisted(false);
+            Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(
+                player.getName(),
+                "☠ Ви помер в HARDCORE режимі! Постійний бан.",
+                null,
+                null
+            );
+            
+            Bukkit.broadcastMessage("§4§l[☠] " + player.getName() + " §4помер в HARDCORE режимі! ПОСТІЙНИЙ БАН!");
+            
+            // Кікнути гравця
+            player.kickPlayer("§4☠ Ви помер в HARDCORE режимі!\n§4ПОСТІЙНИЙ БАН!");
+        }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        UUID uuid = player.getUniqueId();
-
-        // Якщо гравець вже набрав 15 годин — відразу хардкор
-        if (timeManager.isHardcore(uuid)) {
-            activateHardcore(player);
-        }
+        timeManager.loadPlayer(player.getUniqueId());
         
-        // Якщо таймер запущений — показуємо BossBar
-        if (timeManager.isTimerRunning(uuid)) {
-            long totalSeconds = timeManager.getTime(uuid);
-            updateBossBar(player, uuid, totalSeconds);
+        long time = timeManager.getTime(player.getUniqueId());
+        if (time > 0) {
+            long hours = time / 3600;
+            long minutes = (time % 3600) / 60;
+            player.sendMessage(String.format("§6Ваш час онлайн: §f%d год %d хв", hours, minutes));
         }
     }
 
@@ -98,118 +180,18 @@ public class TimeHardcore extends JavaPlugin implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-        
-        // Видаляємо BossBar для гравця
-        BossBar bar = playerBars.remove(uuid);
+        timeManager.stopTimer(uuid);
+        removeBossBar(uuid);
+    }
+
+    private void removeBossBar(UUID uuid) {
+        BossBar bar = playerBossBars.remove(uuid);
         if (bar != null) {
             bar.removeAll();
         }
-        
-        timeManager.save();
     }
 
-    @EventHandler
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        Player player = event.getEntity();
-        UUID uuid = player.getUniqueId();
-
-        if (timeManager.isHardcore(uuid)) {
-            // Бан після смерті в хардкорі
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                player.kickPlayer("§4☠ Ти помер у Hardcore режимі. Ти заблокований назавжди.");
-                Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(
-                    player.getName(),
-                    "§4Смерть у Hardcore режимі після 15 годин гри.",
-                    null,
-                    "TimeHardcore"
-                );
-                getLogger().info("[TimeHardcore] Гравець " + player.getName() + " заблокований після смерті в Hardcore.");
-            }, 20L);
-        }
-    }
-
-    public void createBossBar(Player player) {
-        UUID uuid = player.getUniqueId();
-        
-        // Видаляємо старий бар якщо він існує
-        BossBar oldBar = playerBars.get(uuid);
-        if (oldBar != null) {
-            oldBar.removeAll();
-        }
-        
-        // Створюємо новий BossBar
-        BossBar bar = Bukkit.createBossBar("§eЧас гри: 0:00:00 / 15:00:00", BarColor.GREEN, BarStyle.SOLID);
-        bar.addPlayer(player);
-        playerBars.put(uuid, bar);
-        
-        getLogger().info("[TimeHardcore] BossBar створений для " + player.getName());
-    }
-
-    private void updateBossBar(Player player, UUID uuid, long totalSeconds) {
-        // Якщо таймер не запущений — не показуємо бар
-        if (!timeManager.isTimerRunning(uuid)) {
-            BossBar bar = playerBars.remove(uuid);
-            if (bar != null) {
-                bar.removeAll();
-            }
-            return;
-        }
-        
-        BossBar bar = playerBars.get(uuid);
-        
-        // Якщо бара немає — створюємо
-        if (bar == null) {
-            bar = Bukkit.createBossBar("§eЧас гри: 0:00:00 / 15:00:00", BarColor.GREEN, BarStyle.SOLID);
-            bar.addPlayer(player);
-            playerBars.put(uuid, bar);
-        }
-
-        // Розраховуємо прогрес (0.0 до 1.0)
-        double progress = Math.min((double) totalSeconds / HARDCORE_THRESHOLD, 1.0);
-
-        // Форматуємо час
-        long hours = totalSeconds / 3600;
-        long minutes = (totalSeconds % 3600) / 60;
-        long seconds = totalSeconds % 60;
-        String timeStr = String.format("%d:%02d:%02d", hours, minutes, seconds);
-
-        boolean isHardcore = timeManager.isHardcore(uuid);
-        
-        if (isHardcore) {
-            // HARDCORE режим — червона полоска
-            bar.setColor(BarColor.RED);
-            bar.setTitle("§4§l☠ HARDCORE! §r§e" + timeStr + " §7(Смерть = БАН)");
-            bar.setProgress(1.0);
-        } else if (progress >= 0.9) {
-            // 90% прогресу — червоний
-            bar.setColor(BarColor.RED);
-            bar.setTitle("§c⚠⚠⚠ ДУЖЕ БЛИЗЬКО! §e" + timeStr + " / 15:00:00");
-            bar.setProgress(progress);
-        } else if (progress >= 0.75) {
-            // 75% прогресу — оранжевий
-            bar.setColor(BarColor.ORANGE);
-            bar.setTitle("§6⚠⚠ Дуже близько! §e" + timeStr + " / 15:00:00");
-            bar.setProgress(progress);
-        } else if (progress >= 0.5) {
-            // 50% прогресу — жовтий
-            bar.setColor(BarColor.YELLOW);
-            bar.setTitle("§e⏱ Час гри: " + timeStr + " / 15:00:00");
-            bar.setProgress(progress);
-        } else if (progress > 0) {
-            // Менше 50% — зелений
-            bar.setColor(BarColor.GREEN);
-            bar.setTitle("§a✓ Час гри: " + timeStr + " / 15:00:00");
-            bar.setProgress(progress);
-        }
-    }
-
-    private void activateHardcore(Player player) {
-        player.setGameMode(GameMode.SURVIVAL);
-        // Встановлюємо хардкор через атрибут серця — 1 life
-        player.setHealthScale(2.0);
-        player.sendMessage("§4§l☠ УВАГА! §r§c Ти зіграв 15+ годин. Ти тепер у §4§lHARDCORE §cрежимі!");
-        player.sendMessage("§cЯкщо помреш — §4§lПОСТІЙНИЙ БАН§c!");
-        Bukkit.broadcastMessage("§4[TimeHardcore] §e" + player.getName() + " §cтепер у §4§lHARDCORE §cрежимі!");
-        getLogger().info("[TimeHardcore] " + player.getName() + " переведений у Hardcore режим.");
+    public long getHardcoreThreshold() {
+        return HARDCORE_THRESHOLD;
     }
 }
