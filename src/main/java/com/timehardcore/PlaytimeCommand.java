@@ -1,4 +1,3 @@
-
 package com.timehardcore;
 
 import org.bukkit.Bukkit;
