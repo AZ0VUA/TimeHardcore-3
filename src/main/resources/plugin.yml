@@ -1,1 +1,23 @@
 
+name: TimeHardcore
+version: 1.0.0
+main: com.timehardcore.TimeHardcore
+api-version: 1.20
+description: Minecraft 1.20.1 - Після 15 годин онлайн гравець переходить у Hardcore режим. При смерті — постійний бан.
+author: YourName
+
+commands:
+  starttimer:
+    description: Запустити таймер 15 годин на Hardcore режим
+    usage: /starttimer
+    aliases: [timer, starth]
+    
+  playtime:
+    description: Показує скільки часу ти зіграв на сервері
+    usage: /playtime [гравець]
+    aliases: [pt, час]
+
+permissions:
+  timehardcore.admin:
+    description: Дозволяє дивитись час інших гравців
+    default: op
