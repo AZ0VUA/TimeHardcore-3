@@ -21,7 +21,6 @@ public class PlaytimeCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            // /playtime — власний час
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cЦю команду можна використовувати тільки як гравець!");
                 return true;
@@ -29,7 +28,6 @@ public class PlaytimeCommand implements CommandExecutor {
             Player player = (Player) sender;
             showTime(sender, player.getUniqueId(), player.getName());
         } else {
-            // /playtime <ім'я> — час іншого гравця (тільки адміни)
             if (!sender.hasPermission("timehardcore.admin")) {
                 sender.sendMessage("§cНемає прав! (timehardcore.admin)");
                 return true;
@@ -57,14 +55,14 @@ public class PlaytimeCommand implements CommandExecutor {
         long remHours = remaining / 3600;
         long remMinutes = (remaining % 3600) / 60;
 
-        // Красивый вывод
         sender.sendMessage("\n");
         sender.sendMessage("§6§l╔════════════════════════════════════════╗");
-        sender.sendMessage("§6§l║ ⏱ TimeHardcore - Інформація ⏱ §r§6§l      ║");
+        sender.sendMessage("§6§l║ ⏱ TimeHardcore - Інформація ⏱ §r§6§l  ║");
         sender.sendMessage("§6§l╠════════════════════════════════════════╣");
-        sender.sendMessage("§6§l║ §r§eГравець: §a" + padString(name, 32) + " §6§l║");
+        sender.sendMessage("§6§l║ §r§eГравець: §a" + padString(name, 31));
         sender.sendMessage("§6§l║ §r");
-        sender.sendMessage("§6§l║ §r§eЧас гри: §a" + hours + " год §b" + String.format("%02d", minutes) + " хв §c" + String.format("%02d", seconds) + " сек" + padRight(46) + "§6§l║");
+        sender.sendMessage("§6§l║ §r§eЧас гри: §a" + String.format("%02d", hours) + " §eгод §b" + String.format("%02d", minutes) + " §eхв §c" + String.format("%02d", seconds) + " §eсек");
+        sender.sendMessage("§6§l║ §r");
         
         if (timerRunning) {
             sender.sendMessage("§6§l║ §r§6Таймер: §a✓ Запущено");
@@ -80,16 +78,13 @@ public class PlaytimeCommand implements CommandExecutor {
             sender.sendMessage("§6§l║ §r§c⚠ СМЕРТЬ = ПОСТІЙНИЙ БАН!");
         } else {
             sender.sendMessage("§6§l║ §r§aСтатус: §2Звичайний режим");
-            sender.sendMessage("§6§l║ §r§eДо Hardcore: §c" + remHours + " год §b" + remMinutes + " хв");
+            sender.sendMessage("§6§l║ §r§eДо Hardcore: §c" + remHours + " §eгод §b" + remMinutes + " §eхв");
         }
         
         sender.sendMessage("§6§l╚════════════════════════════════════════╝");
         sender.sendMessage("\n");
     }
 
-    /**
-     * Створює красиву прогрес-бар
-     */
     private String createProgressBar(long current, long max) {
         double progress = Math.min((double) current / max, 1.0);
         int barLength = 30;
@@ -97,19 +92,18 @@ public class PlaytimeCommand implements CommandExecutor {
         
         StringBuilder bar = new StringBuilder("§6§l║ §r§l");
         
-        // Кольорова полоска
         for (int i = 0; i < barLength; i++) {
             if (i < filledLength) {
                 if (progress >= 0.95) {
-                    bar.append("§4");  // Червоний
+                    bar.append("§4");
                 } else if (progress >= 0.85) {
-                    bar.append("§c");  // Темно-червоний
+                    bar.append("§c");
                 } else if (progress >= 0.70) {
-                    bar.append("§6");  // Оранжевий
+                    bar.append("§6");
                 } else if (progress >= 0.50) {
-                    bar.append("§e");  // Жовтий
+                    bar.append("§e");
                 } else {
-                    bar.append("§a");  // Зелений
+                    bar.append("§a");
                 }
                 bar.append("█");
             } else {
@@ -121,24 +115,10 @@ public class PlaytimeCommand implements CommandExecutor {
         return bar.toString();
     }
 
-    /**
-     * Паддинг рядка
-     */
     private String padString(String str, int length) {
         if (str.length() >= length) return str;
         StringBuilder sb = new StringBuilder(str);
         while (sb.length() < length) {
-            sb.append(" ");
-        }
-        return sb.toString();
-    }
-
-    /**
-     * Паддинг справа
-     */
-    private String padRight(int length) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < length; i++) {
             sb.append(" ");
         }
         return sb.toString();
