@@ -29,23 +29,19 @@ public class StartTimerCommand implements CommandExecutor {
         Player player = (Player) sender;
         UUID uuid = player.getUniqueId();
 
-        // Перевіряємо чи таймер вже запущений
         if (timeManager.isTimerRunning(uuid)) {
             player.sendMessage("§c⚠ Таймер вже запущений!");
             player.sendMessage("§eВаш час: §a" + formatTime(timeManager.getTime(uuid)));
             return true;
         }
 
-        // Запускаємо таймер
         timeManager.startTimer(uuid);
         
-        // Показуємо BossBar (потрібно мати доступ до TimeHardcore)
         if (plugin instanceof TimeHardcore) {
             TimeHardcore main = (TimeHardcore) plugin;
             main.createBossBar(player, uuid);
         }
-        
-        // Красивое повідомлення
+
         player.sendMessage("\n");
         player.sendMessage("§2§l╔════════════════════════════════════════╗");
         player.sendMessage("§2§l║ ✅ ТАЙМЕР ЗАПУЩЕНО! ✅ §r§2§l          ║");
@@ -61,8 +57,8 @@ public class StartTimerCommand implements CommandExecutor {
         Bukkit.broadcastMessage("§6[TimeHardcore] §e" + player.getName() + " §aзапустив таймер!");
         Bukkit.broadcastMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-        plugin.getLogger().info("✅ Таймер запущено для гравця: " + player.getName());
-        
+        plugin.getLogger().info("✅ Таймер запущено для: " + player.getName());
+
         return true;
     }
 
