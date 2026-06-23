@@ -1,6 +1,7 @@
 package com.timehardcore;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -9,6 +10,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -24,6 +26,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
     private TimeManager timeManager;
     private static final long HARDCORE_THRESHOLD = 15 * 60 * 60; // 15 годин в секундах
     private final Map<UUID, BossBar> playerBars = new HashMap<>();
+    private final Map<UUID, Long> hardcoreStartTime = new HashMap<>(); // Коли став Hardcore
 
     @Override
     public void onEnable() {
@@ -31,7 +34,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
         
         // Команди
-        getCommand("playtime").setExecutor(new PlaytimeCommand(timeManager, HARDCORE_THRESHOLD));
+        getCommand("playtime").setExecutor(new PlaytimeCommand(timeManager, HARDCORE_THRESHOLD, hardcoreStartTime));
         getCommand("starttimer").setExecutor(new StartTimerCommand(timeManager, this));
         
         // Запустити таймер у ВСІХ
@@ -53,7 +56,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
             Bukkit.broadcastMessage("\n§6§l╔════════════════════════════════════════╗");
             Bukkit.broadcastMessage("§6§l║ ✅ ТАЙМЕР ЗАПУЩЕНО ДЛЯ ВСІХ! §r§6§l  ║");
             Bukkit.broadcastMessage("§6§l╠════════════════════════════════════════╣");
-            Bukkit.broadcastMessage("§6§l║ §r§eГравців: §a" + count + " §6§l║");
+            Bukkit.broadcastMessage("§6§l║ §r§eГравців: §a" + count);
             Bukkit.broadcastMessage("§6§l║ §r§c15 годин до HARDCORE режиму!        §6§l║");
             Bukkit.broadcastMessage("§6§l║ §r§cСмерть = ПОСТІЙНИЙ БАН ☠            §6§l║");
             Bukkit.broadcastMessage("§6§l╚════════════════════════════════════════╝\n");
@@ -82,7 +85,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
             
             Bukkit.broadcastMessage("\n§c§l╔════════════════════════════════════════╗");
             Bukkit.broadcastMessage("§c§l║ ⏹ ТАЙМЕР ЗУПИНЕНО ДЛЯ ВСІХ! §r§c§l   ║");
-            Bukkit.broadcastMessage("§c§l║ §r§eГравців: §a" + count + " §c§l║");
+            Bukkit.broadcastMessage("§c§l║ §r§eГравців: §a" + count);
             Bukkit.broadcastMessage("§c§l╚════════════════════════════════════════╝\n");
             
             return true;
@@ -146,7 +149,15 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                 long secs = time % 60;
                 
                 String status = running ? "§a✓" : "§c✗";
-                String mode = hardcore ? "§4☠ HC" : "§2Норм";
+                String mode;
+                
+                if (hardcore) {
+                    long hardcoreTime = hardcoreStartTime.getOrDefault(uuid, 0L);
+                    long daysSurvived = (System.currentTimeMillis() - hardcoreTime) / (24 * 60 * 1000); // дні
+                    mode = "§4☠ HC (" + daysSurvived + "д)";
+                } else {
+                    mode = "§2Норм";
+                }
                 
                 sender.sendMessage(String.format("§6§l║ §r§e%s §a[%02d:%02d:%02d] %s %s", 
                     padName(player.getName(), 12), hours, minutes, secs, status, mode));
@@ -190,6 +201,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                         if (totalSeconds >= HARDCORE_THRESHOLD && !timeManager.isHardcore(uuid)) {
                             if (player.getGameMode() != GameMode.SPECTATOR) {
                                 timeManager.setHardcore(uuid, true);
+                                hardcoreStartTime.put(uuid, System.currentTimeMillis()); // Записуємо час запуску
                                 activateHardcore(player);
                             }
                         }
@@ -207,7 +219,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         getLogger().info("═══════════════════════════════════════");
         getLogger().info("✅ TimeHardcore v1.0.0 запущено!");
         getLogger().info("⏱ Таймер: 15 годин до Hardcore");
-        getLogger().info("☠ При смерті в Hardcore = БАН");
+        getLogger().info("☠ Справжній HARDCORE режим Minecraft!");
         getLogger().info("═══════════════════════════════════════");
     }
 
@@ -276,23 +288,38 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                 bar.removeAll();
             }
             
+            long hardcoreTime = hardcoreStartTime.getOrDefault(uuid, 0L);
+            long daysSurvived = (System.currentTimeMillis() - hardcoreTime) / (24 * 60 * 1000); // дні
+            
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                player.kickPlayer("§4☠ Ти помер у Hardcore режимі!\n§4Ти заблокований назавжди!");
+                player.kickPlayer("§4☠ Ти помер у Hardcore режимі!\n§4Ти прожив " + daysSurvived + " днів\n§4Ти заблокований назавжди!");
                 
                 Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(
                     player.getName(),
-                    "§c[TimeHardcore] Смерть у Hardcore режимі після " + 
-                    formatTime(timeManager.getTime(uuid)) + " гри.",
+                    "§c[TimeHardcore] HARDCORE - Помер після " + daysSurvived + " днів",
                     null,
                     "TimeHardcore Plugin"
                 );
                 
                 getLogger().warning("════════════════════════════════════════");
-                getLogger().warning("☠ ГРАВЕЦЬ ЗАБАНЕНИЙ");
+                getLogger().warning("☠ ГРАВЕЦЬ ЗАБАНЕНИЙ У HARDCORE");
                 getLogger().warning("Ім'я: " + player.getName());
+                getLogger().warning("Прожив днів: " + daysSurvived);
                 getLogger().warning("Час гри: " + formatTime(timeManager.getTime(uuid)));
                 getLogger().warning("════════════════════════════════════════");
             }, 10L);
+        }
+    }
+    
+    @EventHandler
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        
+        // Якщо гравець в Hardcore - забороняємо змінювати режим
+        if (timeManager.isHardcore(uuid) && event.getNewGameMode() != GameMode.SURVIVAL) {
+            event.setCancelled(true);
+            player.sendMessage("§c☠ Ти не можеш змінити режим гри в Hardcore режимі!");
         }
     }
 
@@ -335,8 +362,11 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         boolean isHardcore = timeManager.isHardcore(uuid);
         
         if (isHardcore) {
+            long hardcoreTime = hardcoreStartTime.getOrDefault(uuid, 0L);
+            long daysSurvived = (System.currentTimeMillis() - hardcoreTime) / (24 * 60 * 1000);
+            
             bar.setColor(BarColor.RED);
-            bar.setTitle("§4§l☠ HARDCORE! ☠ §e" + currentTime + " §7| §cСмерть = БАН");
+            bar.setTitle("§4§l☠ HARDCORE! (" + daysSurvived + " днів) ☠ §e" + currentTime);
             bar.setProgress(1.0);
             
         } else if (progress >= 0.95) {
@@ -369,23 +399,33 @@ public class TimeHardcore extends JavaPlugin implements Listener {
     private void activateHardcore(Player player) {
         UUID uuid = player.getUniqueId();
         
+        // СПРАВЖНІЙ HARDCORE - SURVIVAL режим на максимальній складності
         player.setGameMode(GameMode.SURVIVAL);
-        player.setHealthScale(2.0);
-        player.setMaxHealth(2.0);
-        player.setHealth(2.0);
+        
+        // Встановлюємо максимальну складність для всього світу
+        player.getWorld().setDifficulty(Difficulty.HARD);
+        
+        // Гравець залишається з нормальним здоров'ям, але це СПРАВЖНІЙ HARDCORE
+        // При смерті - бан навічки
+        
+        long hardcoreTime = hardcoreStartTime.getOrDefault(uuid, 0L);
+        long daysSurvived = (System.currentTimeMillis() - hardcoreTime) / (24 * 60 * 1000);
         
         player.sendMessage("\n");
         player.sendMessage("§4§l╔════════════════════════════════════════╗");
         player.sendMessage("§4§l║ ☠ HARDCORE РЕЖИМ АКТИВОВАНИЙ! ☠ §r§4§l║");
         player.sendMessage("§4§l╠════════════════════════════════════════╣");
         player.sendMessage("§4§l║ §r§cТи прожив 15 ГОДИН!                 §4§l║");
-        player.sendMessage("§4§l║ §r§cСмерть → ПОСТІЙНИЙ БАН!             §4§l║");
-        player.sendMessage("§4§l║ §r§aОстало 1 СЕРДЦЕ!                     §4§l║");
+        player.sendMessage("§4§l║ §r§cТепер СПРАВЖНІЙ HARDCORE РЕЖИМ!      §4§l║");
+        player.sendMessage("§4§l║ §r§cСмерть → ПОСТІЙНИЙ БАН ☠            §4§l║");
+        player.sendMessage("§4§l║ §r§aСкладність: §cМАКСИМАЛЬНА          §4§l║");
+        player.sendMessage("§4§l║ §r§aDні вижити: §f" + daysSurvived);
         player.sendMessage("§4§l╚════════════════════════════════════════╝");
         player.sendMessage("\n");
         
         Bukkit.broadcastMessage("\n§4§l╔════════════════════════════════════════╗");
         Bukkit.broadcastMessage("§4§l║ ☠ " + player.getName() + " УВІЙШОВ В HARDCORE! ☠");
+        Bukkit.broadcastMessage("§4§l║ §r§cТепер це справжня гра на виживання!");
         Bukkit.broadcastMessage("§4§l╚════════════════════════════════════════╝\n");
     }
 
