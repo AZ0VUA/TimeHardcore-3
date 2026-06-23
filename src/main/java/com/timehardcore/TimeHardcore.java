@@ -22,8 +22,7 @@ import java.util.UUID;
 public class TimeHardcore extends JavaPlugin implements Listener {
 
     private TimeManager timeManager;
-    private static final long HARDCORE_THRESHOLD = 15 * 60 * 60;
-    
+    private static final long HARDCORE_THRESHOLD = 15 * 60 * 60; // 15 годин в секундах
     private final Map<UUID, BossBar> playerBars = new HashMap<>();
 
     @Override
@@ -31,9 +30,150 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         timeManager = new TimeManager(this);
         getServer().getPluginManager().registerEvents(this, this);
         
+        // Команди
         getCommand("playtime").setExecutor(new PlaytimeCommand(timeManager, HARDCORE_THRESHOLD));
         getCommand("starttimer").setExecutor(new StartTimerCommand(timeManager, this));
+        
+        // Запустити таймер у ВСІХ
+        getCommand("startalltime").setExecutor((sender, cmd, label, args) -> {
+            if (!sender.hasPermission("timehardcore.admin")) {
+                sender.sendMessage("§cНемає прав!");
+                return true;
+            }
+            
+            int count = 0;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (!timeManager.isTimerRunning(player.getUniqueId())) {
+                    timeManager.startTimer(player.getUniqueId());
+                    createBossBar(player, player.getUniqueId());
+                    count++;
+                }
+            }
+            
+            Bukkit.broadcastMessage("\n§6§l╔════════════════════════════════════════╗");
+            Bukkit.broadcastMessage("§6§l║ ✅ ТАЙМЕР ЗАПУЩЕНО ДЛЯ ВСІХ! §r§6§l  ║");
+            Bukkit.broadcastMessage("§6§l╠════════════════════════════════════════╣");
+            Bukkit.broadcastMessage("§6§l║ §r§eГравців: §a" + count + " §6§l║");
+            Bukkit.broadcastMessage("§6§l║ §r§c15 годин до HARDCORE режиму!        §6§l║");
+            Bukkit.broadcastMessage("§6§l║ §r§cСмерть = ПОСТІЙНИЙ БАН ☠            §6§l║");
+            Bukkit.broadcastMessage("§6§l╚════════════════════════════════════════╝\n");
+            
+            return true;
+        });
+        
+        // Зупинити таймер у ВСІХ
+        getCommand("stopalltime").setExecutor((sender, cmd, label, args) -> {
+            if (!sender.hasPermission("timehardcore.admin")) {
+                sender.sendMessage("§cНемає прав!");
+                return true;
+            }
+            
+            int count = 0;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (timeManager.isTimerRunning(player.getUniqueId())) {
+                    timeManager.stopTimer(player.getUniqueId());
+                    BossBar bar = playerBars.remove(player.getUniqueId());
+                    if (bar != null) {
+                        bar.removeAll();
+                    }
+                    count++;
+                }
+            }
+            
+            Bukkit.broadcastMessage("\n§c§l╔════════════════════════════════════════╗");
+            Bukkit.broadcastMessage("§c§l║ ⏹ ТАЙМЕР ЗУПИНЕНО ДЛЯ ВСІХ! §r§c§l   ║");
+            Bukkit.broadcastMessage("§c§l║ §r§eГравців: §a" + count + " §c§l║");
+            Bukkit.broadcastMessage("§c§l╚════════════════════════════════════════╝\n");
+            
+            return true;
+        });
+        
+        // Пропустити час (для тестування)
+        getCommand("skiptime").setExecutor((sender, cmd, label, args) -> {
+            if (!sender.hasPermission("timehardcore.admin")) {
+                sender.sendMessage("§cНемає прав!");
+                return true;
+            }
+            
+            if (args.length == 0) {
+                sender.sendMessage("§cВикористання: /skiptime <секунди>");
+                sender.sendMessage("§eПриклади: /skiptime 3600 (1 час), /skiptime 54000 (15 часов)");
+                return true;
+            }
+            
+            try {
+                long seconds = Long.parseLong(args[0]);
+                int count = 0;
+                
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    UUID uuid = player.getUniqueId();
+                    if (timeManager.isTimerRunning(uuid)) {
+                        timeManager.addTime(uuid, seconds);
+                        count++;
+                    }
+                }
+                
+                sender.sendMessage("\n§e§l╔════════════════════════════════════════╗");
+                sender.sendMessage("§e§l║ ⏩ ВРЕМЯ ПРОПУЩЕНО! §r§e§l              ║");
+                sender.sendMessage("§e§l╠════════════════════════════════════════╣");
+                sender.sendMessage("§e§l║ §r§eДобавлено: §a" + seconds + " §eсекунд");
+                sender.sendMessage("§e§l║ §r§eГравців: §a" + count);
+                sender.sendMessage("§e§l╚════════════════════════════════════════╝\n");
+                
+                return true;
+            } catch (NumberFormatException e) {
+                sender.sendMessage("§cОшибка: введіть число!");
+                return true;
+            }
+        });
+        
+        // Перевірити статус
+        getCommand("checkstatus").setExecutor((sender, cmd, label, args) -> {
+            sender.sendMessage("\n§6§l╔════════════════════════════════════════╗");
+            sender.sendMessage("§6§l║ 📊 STATUS ВСІХ ГРАВЦІВ §r§6§l         ║");
+            sender.sendMessage("§6§l╠════════════════════════════════════════╣");
+            sender.sendMessage("§6§l║ §r§eОнлайн: §a" + Bukkit.getOnlinePlayers().size());
+            sender.sendMessage("§6§l║ §r");
+            
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                UUID uuid = player.getUniqueId();
+                long time = timeManager.getTime(uuid);
+                boolean hardcore = timeManager.isHardcore(uuid);
+                boolean running = timeManager.isTimerRunning(uuid);
+                
+                long hours = time / 3600;
+                long minutes = (time % 3600) / 60;
+                long secs = time % 60;
+                
+                String status = running ? "§a✓" : "§c✗";
+                String mode = hardcore ? "§4☠ HC" : "§2Норм";
+                
+                sender.sendMessage(String.format("§6§l║ §r§e%s §a[%02d:%02d:%02d] %s %s", 
+                    padName(player.getName(), 12), hours, minutes, secs, status, mode));
+            }
+            
+            sender.sendMessage("§6§l╚════════════════════════════════════════╝\n");
+            return true;
+        });
+        
+        // Допомога
+        getCommand("thhelp").setExecutor((sender, cmd, label, args) -> {
+            sender.sendMessage("\n§6§l╔════════════════════════════════════════╗");
+            sender.sendMessage("§6§l║ 📖 TIMEHARDCORE КОМАНДИ §r§6§l         ║");
+            sender.sendMessage("§6§l╠════════════════════════════════════════╣");
+            sender.sendMessage("§6§l║ §r§eГРАВЦІ:");
+            sender.sendMessage("§6§l║ §r§f/starttimer §e- Запустити таймер");
+            sender.sendMessage("§6§l║ §r§f/playtime §e - Показати час");
+            sender.sendMessage("§6§l║ §r§eАДМІНИ:");
+            sender.sendMessage("§6§l║ §r§f/startalltime §e - Запустити ВСІМ");
+            sender.sendMessage("§6§l║ §r§f/stopalltime §e  - Зупинити ВСІМ");
+            sender.sendMessage("§6§l║ §r§f/skiptime <сек> §e - Пропустити час");
+            sender.sendMessage("§6§l║ §r§f/checkstatus §e - Перевірити статус");
+            sender.sendMessage("§6§l╚════════════════════════════════════════╝\n");
+            return true;
+        });
 
+        // Основний цикл - рахує час для гравців
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -46,6 +186,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                         
                         updateBossBar(player, uuid, totalSeconds);
                         
+                        // Перевіряємо чи досягли 15 годин
                         if (totalSeconds >= HARDCORE_THRESHOLD && !timeManager.isHardcore(uuid)) {
                             if (player.getGameMode() != GameMode.SPECTATOR) {
                                 timeManager.setHardcore(uuid, true);
@@ -58,7 +199,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                 try {
                     timeManager.save();
                 } catch (IOException e) {
-                    getLogger().warning("Помилка при збереженні даних: " + e.getMessage());
+                    getLogger().warning("Помилка при збереженні: " + e.getMessage());
                 }
             }
         }.runTaskTimer(this, 20L, 20L);
@@ -66,7 +207,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         getLogger().info("═══════════════════════════════════════");
         getLogger().info("✅ TimeHardcore v1.0.0 запущено!");
         getLogger().info("⏱ Таймер: 15 годин до Hardcore");
-        getLogger().info("☠ При смерті в Hardcore = постійний бан");
+        getLogger().info("☠ При смерті в Hardcore = БАН");
         getLogger().info("═══════════════════════════════════════");
     }
 
@@ -80,7 +221,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         try {
             timeManager.save();
         } catch (IOException e) {
-            getLogger().warning("Помилка при збереженні даних: " + e.getMessage());
+            getLogger().warning("Помилка при збереженні: " + e.getMessage());
         }
         
         getLogger().info("═══════════════════════════════════════");
@@ -93,6 +234,8 @@ public class TimeHardcore extends JavaPlugin implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+
+        timeManager.loadPlayer(uuid);
 
         if (timeManager.isHardcore(uuid)) {
             activateHardcore(player);
@@ -118,7 +261,7 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         try {
             timeManager.save();
         } catch (IOException e) {
-            getLogger().warning("Помилка при збереженні даних: " + e.getMessage());
+            getLogger().warning("Помилка при збереженні: " + e.getMessage());
         }
     }
 
@@ -148,7 +291,6 @@ public class TimeHardcore extends JavaPlugin implements Listener {
                 getLogger().warning("☠ ГРАВЕЦЬ ЗАБАНЕНИЙ");
                 getLogger().warning("Ім'я: " + player.getName());
                 getLogger().warning("Час гри: " + formatTime(timeManager.getTime(uuid)));
-                getLogger().warning("Причина: Смерть у Hardcore режимі");
                 getLogger().warning("════════════════════════════════════════");
             }, 10L);
         }
@@ -169,8 +311,6 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         bar.addPlayer(player);
         bar.setProgress(0.0);
         playerBars.put(uuid, bar);
-        
-        getLogger().info("✅ BossBar створений для " + player.getName());
     }
 
     private void updateBossBar(Player player, UUID uuid, long totalSeconds) {
@@ -196,33 +336,32 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         
         if (isHardcore) {
             bar.setColor(BarColor.RED);
-            bar.setStyle(BarStyle.SOLID);
-            bar.setTitle("§4§l☠ HARDCORE РЕЖИМ! ☠ §r§e" + currentTime + " §7| §cСмерть = БАН");
+            bar.setTitle("§4§l☠ HARDCORE! ☠ §e" + currentTime + " §7| §cСмерть = БАН");
             bar.setProgress(1.0);
             
         } else if (progress >= 0.95) {
             bar.setColor(BarColor.RED);
-            bar.setTitle("§c⚠⚠⚠ КРИТИЧНО БЛИЗЬКО! §e" + currentTime + " / 15:00:00 §7(осталось §c" + remHours + "h " + remMinutes + "m§7)");
+            bar.setTitle("§c⚠⚠⚠ КРИТИЧНО! §e" + currentTime + " / 15:00:00");
             bar.setProgress(progress);
             
         } else if (progress >= 0.85) {
             bar.setColor(BarColor.RED);
-            bar.setTitle("§6⚠⚠ ДУЖЕ БЛИЗЬКО! §e" + currentTime + " / 15:00:00 §7(осталось §c" + remHours + "h " + remMinutes + "m§7)");
+            bar.setTitle("§6⚠⚠ БЛИЗЬКО! §e" + currentTime + " / 15:00:00");
             bar.setProgress(progress);
             
         } else if (progress >= 0.70) {
             bar.setColor(BarColor.YELLOW);
-            bar.setTitle("§6⚠ Близько до Hardcore! §e" + currentTime + " / 15:00:00 §7(осталось §c" + remHours + "h " + remMinutes + "m§7)");
+            bar.setTitle("§6⚠ До Hardcore: §e" + currentTime + " / 15:00:00");
             bar.setProgress(progress);
             
         } else if (progress >= 0.50) {
             bar.setColor(BarColor.YELLOW);
-            bar.setTitle("§e⏱ Час гри: " + currentTime + " / 15:00:00 §7(осталось §a" + remHours + "h " + remMinutes + "m§7)");
+            bar.setTitle("§e⏱ Час: " + currentTime + " / 15:00:00");
             bar.setProgress(progress);
             
         } else if (progress > 0) {
             bar.setColor(BarColor.GREEN);
-            bar.setTitle("§a✓ Час гри: " + currentTime + " / 15:00:00 §7(осталось §a" + remHours + "h " + remMinutes + "m§7)");
+            bar.setTitle("§a✓ Час: " + currentTime + " / 15:00:00");
             bar.setProgress(progress);
         }
     }
@@ -231,36 +370,34 @@ public class TimeHardcore extends JavaPlugin implements Listener {
         UUID uuid = player.getUniqueId();
         
         player.setGameMode(GameMode.SURVIVAL);
-        
         player.setHealthScale(2.0);
         player.setMaxHealth(2.0);
         player.setHealth(2.0);
         
         player.sendMessage("\n");
         player.sendMessage("§4§l╔════════════════════════════════════════╗");
-        player.sendMessage("§4§l║ ☠ ЛАДНО! ТИ ПРОЖИВ 15 ГОДИН! ☠ §r§4§l║");
+        player.sendMessage("§4§l║ ☠ HARDCORE РЕЖИМ АКТИВОВАНИЙ! ☠ §r§4§l║");
         player.sendMessage("§4§l╠════════════════════════════════════════╣");
-        player.sendMessage("§4§l║ §r§cТи тепер у HARDCORE РЕЖИМІ!        §4§l║");
-        player.sendMessage("§4§l║ §r§cПри смерті → ПОСТІЙНИЙ БАН!         §4§l║");
-        player.sendMessage("§4§l║ §r§aТобі осталось 1 сердце!            §4§l║");
+        player.sendMessage("§4§l║ §r§cТи прожив 15 ГОДИН!                 §4§l║");
+        player.sendMessage("§4§l║ §r§cСмерть → ПОСТІЙНИЙ БАН!             §4§l║");
+        player.sendMessage("§4§l║ §r§aОстало 1 СЕРДЦЕ!                     §4§l║");
         player.sendMessage("§4§l╚════════════════════════════════════════╝");
         player.sendMessage("\n");
         
-        Bukkit.broadcastMessage("§4§l╔════════════════════════════════════════╗");
-        Bukkit.broadcastMessage("§4§l║ §r§e" + player.getName() + " §c перейшов у HARDCORE РЕЖИМ! ☠");
-        Bukkit.broadcastMessage("§4§l╚════════════════════════════════════════╝");
-        
-        getLogger().warning("════════════════════════════════════════");
-        getLogger().warning("☠ ГРАВЕЦЬ ПЕРЕВЕДЕНИЙ У HARDCORE");
-        getLogger().warning("Ім'я: " + player.getName());
-        getLogger().warning("Час гри: " + formatTime(timeManager.getTime(uuid)));
-        getLogger().warning("════════════════════════════════════════");
+        Bukkit.broadcastMessage("\n§4§l╔════════════════════════════════════════╗");
+        Bukkit.broadcastMessage("§4§l║ ☠ " + player.getName() + " УВІЙШОВ В HARDCORE! ☠");
+        Bukkit.broadcastMessage("§4§l╚════════════════════════════════════════╝\n");
     }
 
     private String formatTime(long seconds) {
         long hours = seconds / 3600;
         long minutes = (seconds % 3600) / 60;
         long secs = seconds % 60;
-        return String.format("%d годин %d хвилин %d секунд", hours, minutes, secs);
+        return String.format("%d год %d хв %d сек", hours, minutes, secs);
+    }
+    
+    private String padName(String name, int length) {
+        if (name.length() >= length) return name;
+        return String.format("%-" + length + "s", name);
     }
 }
