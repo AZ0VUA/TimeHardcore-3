@@ -6,68 +6,45 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class TimeManager {
 
     private final JavaPlugin plugin;
     private final File dataFile;
-    private FileConfiguration data;
-    private Map<UUID, Long> playerTimes = new HashMap<>();
-    private Map<UUID, Boolean> playerHardcore = new HashMap<>();
-    private Map<UUID, Boolean> timerRunning = new HashMap<>();
+    private FileConfiguration dataConfig;
+
+    private final Map<UUID, Long> playerTime = new HashMap<>();
+    private final Map<UUID, Boolean> hardcoreMap = new HashMap<>();
+    private final Map<UUID, Boolean> timerRunning = new HashMap<>();
 
     public TimeManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.dataFile = new File(plugin.getDataFolder(), "playerdata.yml");
-        loadData();
-    }
-
-    private void loadData() {
-        if (!dataFile.exists()) {
-            try {
-                plugin.getDataFolder().mkdirs();
-                dataFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        data = YamlConfiguration.loadConfiguration(dataFile);
-    }
-
-    public void loadPlayer(UUID uuid) {
-        String uuidStr = uuid.toString();
-        long time = data.getLong("players." + uuidStr + ".time", 0);
-        boolean hardcore = data.getBoolean("players." + uuidStr + ".hardcore", false);
-        boolean running = data.getBoolean("players." + uuidStr + ".timer_running", false);
-        
-        playerTimes.put(uuid, time);
-        playerHardcore.put(uuid, hardcore);
-        timerRunning.put(uuid, running);
-    }
-
-    public long getTime(UUID uuid) {
-        return playerTimes.getOrDefault(uuid, 0L);
+        load();
     }
 
     public void addTime(UUID uuid, long seconds) {
-        long currentTime = getTime(uuid);
-        playerTimes.put(uuid, currentTime + seconds);
-        savePlayer(uuid);
+        if (!isTimerRunning(uuid)) {
+            return;
+        }
+        
+        long current = playerTime.getOrDefault(uuid, 0L);
+        playerTime.put(uuid, current + seconds);
     }
 
-    public void setTime(UUID uuid, long seconds) {
-        playerTimes.put(uuid, seconds);
-        savePlayer(uuid);
+    public long getTime(UUID uuid) {
+        return playerTime.getOrDefault(uuid, 0L);
     }
 
     public boolean isHardcore(UUID uuid) {
-        return playerHardcore.getOrDefault(uuid, false);
+        return hardcoreMap.getOrDefault(uuid, false);
     }
 
-    public void setHardcore(UUID uuid, boolean hardcore) {
-        playerHardcore.put(uuid, hardcore);
-        savePlayer(uuid);
+    public void setHardcore(UUID uuid, boolean value) {
+        hardcoreMap.put(uuid, value);
     }
 
     public boolean isTimerRunning(UUID uuid) {
@@ -76,45 +53,54 @@ public class TimeManager {
 
     public void startTimer(UUID uuid) {
         timerRunning.put(uuid, true);
-        if (!playerTimes.containsKey(uuid)) {
-            playerTimes.put(uuid, 0L);
-        }
-        savePlayer(uuid);
     }
 
     public void stopTimer(UUID uuid) {
         timerRunning.put(uuid, false);
-        savePlayer(uuid);
     }
 
-    private void savePlayer(UUID uuid) {
-        String uuidStr = uuid.toString();
-        data.set("players." + uuidStr + ".time", playerTimes.get(uuid));
-        data.set("players." + uuidStr + ".hardcore", playerHardcore.get(uuid));
-        data.set("players." + uuidStr + ".timer_running", timerRunning.get(uuid));
+    public void save() throws IOException {
+        for (Map.Entry<UUID, Long> entry : playerTime.entrySet()) {
+            dataConfig.set("players." + entry.getKey() + ".time", entry.getValue());
+        }
+        for (Map.Entry<UUID, Boolean> entry : hardcoreMap.entrySet()) {
+            dataConfig.set("players." + entry.getKey() + ".hardcore", entry.getValue());
+        }
+        for (Map.Entry<UUID, Boolean> entry : timerRunning.entrySet()) {
+            dataConfig.set("players." + entry.getKey() + ".timer_running", entry.getValue());
+        }
         
-        try {
-            data.save(dataFile);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Не вдалося зберегти дані для " + uuid);
-            e.printStackTrace();
-        }
+        dataConfig.save(dataFile);
     }
 
-    public void saveAll() {
-        for (UUID uuid : playerTimes.keySet()) {
-            savePlayer(uuid);
+    private void load() {
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
         }
-    }
+        if (!dataFile.exists()) {
+            try {
+                dataFile.createNewFile();
+            } catch (IOException e) {
+                plugin.getLogger().warning("Не вдалося створити playerdata.yml: " + e.getMessage());
+            }
+        }
+        dataConfig = YamlConfiguration.loadConfiguration(dataFile);
 
-    public void resetAll() {
-        playerTimes.clear();
-        playerHardcore.clear();
-        timerRunning.clear();
-        
-        if (dataFile.exists()) {
-            dataFile.delete();
+        if (dataConfig.contains("players")) {
+            for (String uuidStr : dataConfig.getConfigurationSection("players").getKeys(false)) {
+                try {
+                    UUID uuid = UUID.fromString(uuidStr);
+                    long time = dataConfig.getLong("players." + uuidStr + ".time", 0L);
+                    boolean hardcore = dataConfig.getBoolean("players." + uuidStr + ".hardcore", false);
+                    boolean timerOn = dataConfig.getBoolean("players." + uuidStr + ".timer_running", false);
+                    playerTime.put(uuid, time);
+                    hardcoreMap.put(uuid, hardcore);
+                    timerRunning.put(uuid, timerOn);
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("Невірний UUID у playerdata.yml: " + uuidStr);
+                }
+            }
         }
-        loadData();
+        plugin.getLogger().info("Дані гравців завантажено з playerdata.yml");
     }
 }
