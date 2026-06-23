@@ -21,6 +21,7 @@ public class PlaytimeCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
+            // /playtime — власний час
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cЦю команду можна використовувати тільки як гравець!");
                 return true;
@@ -28,6 +29,7 @@ public class PlaytimeCommand implements CommandExecutor {
             Player player = (Player) sender;
             showTime(sender, player.getUniqueId(), player.getName());
         } else {
+            // /playtime <ім'я> — час іншого гравця (тільки адміни)
             if (!sender.hasPermission("timehardcore.admin")) {
                 sender.sendMessage("§cНемає прав! (timehardcore.admin)");
                 return true;
@@ -49,20 +51,96 @@ public class PlaytimeCommand implements CommandExecutor {
         long seconds = totalSeconds % 60;
 
         boolean isHardcore = timeManager.isHardcore(uuid);
+        boolean timerRunning = timeManager.isTimerRunning(uuid);
+        
         long remaining = hardcoreThreshold - totalSeconds;
+        long remHours = remaining / 3600;
+        long remMinutes = (remaining % 3600) / 60;
 
-        sender.sendMessage("§6§l=== TimeHardcore ===");
-        sender.sendMessage("§eГравець: §f" + name);
-        sender.sendMessage(String.format("§eЧас онлайн: §f%d год %d хв %d сек", hours, minutes, seconds));
-
-        if (isHardcore) {
-            sender.sendMessage("§4§l☠ Статус: HARDCORE режим!");
+        // Красивый вывод
+        sender.sendMessage("\n");
+        sender.sendMessage("§6§l╔════════════════════════════════════════╗");
+        sender.sendMessage("§6§l║ ⏱ TimeHardcore - Інформація ⏱ §r§6§l      ║");
+        sender.sendMessage("§6§l╠════════════════════════════════════════╣");
+        sender.sendMessage("§6§l║ §r§eГравець: §a" + padString(name, 32) + " §6§l║");
+        sender.sendMessage("§6§l║ §r");
+        sender.sendMessage("§6§l║ §r§eЧас гри: §a" + hours + " год §b" + String.format("%02d", minutes) + " хв §c" + String.format("%02d", seconds) + " сек" + padRight(46) + "§6§l║");
+        
+        if (timerRunning) {
+            sender.sendMessage("§6§l║ §r§6Таймер: §a✓ Запущено");
+            sender.sendMessage("§6§l║ " + createProgressBar(totalSeconds, hardcoreThreshold));
         } else {
-            long remHours = remaining / 3600;
-            long remMinutes = (remaining % 3600) / 60;
-            sender.sendMessage("§aСтатус: §2Звичайний режим");
-            sender.sendMessage(String.format("§eДо Hardcore: §c%d год %d хв", remHours, remMinutes));
+            sender.sendMessage("§6§l║ §r§6Таймер: §c✗ Не запущено");
         }
-        sender.sendMessage("§6§l==================");
+
+        sender.sendMessage("§6§l║ §r");
+        
+        if (isHardcore) {
+            sender.sendMessage("§6§l║ §r§4§l☠ Статус: HARDCORE РЕЖИМ! ☠");
+            sender.sendMessage("§6§l║ §r§c⚠ СМЕРТЬ = ПОСТІЙНИЙ БАН!");
+        } else {
+            sender.sendMessage("§6§l║ §r§aСтатус: §2Звичайний режим");
+            sender.sendMessage("§6§l║ §r§eДо Hardcore: §c" + remHours + " год §b" + remMinutes + " хв");
+        }
+        
+        sender.sendMessage("§6§l╚════════════════════════════════════════╝");
+        sender.sendMessage("\n");
+    }
+
+    /**
+     * Створює красиву прогрес-бар
+     */
+    private String createProgressBar(long current, long max) {
+        double progress = Math.min((double) current / max, 1.0);
+        int barLength = 30;
+        int filledLength = (int) (barLength * progress);
+        
+        StringBuilder bar = new StringBuilder("§6§l║ §r§l");
+        
+        // Кольорова полоска
+        for (int i = 0; i < barLength; i++) {
+            if (i < filledLength) {
+                if (progress >= 0.95) {
+                    bar.append("§4");  // Червоний
+                } else if (progress >= 0.85) {
+                    bar.append("§c");  // Темно-червоний
+                } else if (progress >= 0.70) {
+                    bar.append("§6");  // Оранжевий
+                } else if (progress >= 0.50) {
+                    bar.append("§e");  // Жовтий
+                } else {
+                    bar.append("§a");  // Зелений
+                }
+                bar.append("█");
+            } else {
+                bar.append("§7░");
+            }
+        }
+        
+        bar.append(" §r§e").append(String.format("%.0f%%", progress * 100)).append(" §6§l║");
+        return bar.toString();
+    }
+
+    /**
+     * Паддинг рядка
+     */
+    private String padString(String str, int length) {
+        if (str.length() >= length) return str;
+        StringBuilder sb = new StringBuilder(str);
+        while (sb.length() < length) {
+            sb.append(" ");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Паддинг справа
+     */
+    private String padRight(int length) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            sb.append(" ");
+        }
+        return sb.toString();
     }
 }
