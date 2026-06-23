@@ -1,23 +1,55 @@
-
 name: TimeHardcore
 version: 1.0.0
 main: com.timehardcore.TimeHardcore
-api-version: 1.20
-description: Minecraft 1.20.1 - Після 15 годин онлайн гравець переходить у Hardcore режим. При смерті — постійний бан.
-author: YourName
+description: §6Плагін для відстеження часу гравців та HARDCORE режиму
+authors: [Developer]
 
 commands:
-  starttimer:
-    description: Запустити таймер 15 годин на Hardcore режим
-    usage: /starttimer
-    aliases: [timer, starth]
-    
   playtime:
-    description: Показує скільки часу ти зіграв на сервері
-    usage: /playtime [гравець]
-    aliases: [pt, час]
+    description: §6Показати час онлайн
+    usage: /playtime [ім'я гравця]
+    permission: timehardcore.playtime
+    
+  starttimer:
+    description: §6Запустити свій таймер часу
+    usage: /starttimer
+    permission: timehardcore.start
+    
+  startalltime:
+    description: §4[АДМІН] §6Запустити таймер у ВСІХ гравців
+    usage: /startalltime
+    permission: timehardcore.admin
+    
+  stopalltime:
+    description: §4[АДМІН] §6Зупинити таймер у ВСІХ гравців
+    usage: /stopalltime
+    permission: timehardcore.admin
+    
+  skiptime:
+    description: §4[АДМІН] §6Пропустити час для тестування
+    usage: /skiptime <кількість секунд>
+    permission: timehardcore.admin
+    
+  checkstatus:
+    description: §4[АДМІН] §6Перевірити статус ВСІХ гравців
+    usage: /checkstatus
+    permission: timehardcore.admin
+    
+  thhelp:
+    description: §6Показати допомогу по командам
+    usage: /thhelp
+    permission: timehardcore.help
 
 permissions:
+  timehardcore.start:
+    description: §6Дозвіл на запуск таймера
+    default: true
+  timehardcore.playtime:
+    description: §6Дозвіл на перегляд часу
+    default: true
+  timehardcore.help:
+    description: §6Дозвіл на перегляд допомоги
+    default: true
   timehardcore.admin:
-    description: Дозволяє дивитись час інших гравців
+    description: §6Адміністратор плагіна
     default: op
