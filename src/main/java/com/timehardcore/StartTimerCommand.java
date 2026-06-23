@@ -1,18 +1,22 @@
 package com.timehardcore;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.UUID;
 
 public class StartTimerCommand implements CommandExecutor {
 
-    private final TimeHardcore plugin;
     private final TimeManager timeManager;
+    private final JavaPlugin plugin;
 
-    public StartTimerCommand(TimeHardcore plugin, TimeManager timeManager) {
-        this.plugin = plugin;
+    public StartTimerCommand(TimeManager timeManager, JavaPlugin plugin) {
         this.timeManager = timeManager;
+        this.plugin = plugin;
     }
 
     @Override
@@ -23,27 +27,49 @@ public class StartTimerCommand implements CommandExecutor {
         }
 
         Player player = (Player) sender;
-        
-        if (timeManager.isTimerRunning(player.getUniqueId())) {
-            player.sendMessage("§cТаймер вже запущений! Використайте §e/stoptimer §cщоб зупинити.");
+        UUID uuid = player.getUniqueId();
+
+        // Перевіряємо чи таймер вже запущений
+        if (timeManager.isTimerRunning(uuid)) {
+            player.sendMessage("§c⚠ Таймер вже запущений!");
+            player.sendMessage("§eВаш час: §a" + formatTime(timeManager.getTime(uuid)));
             return true;
         }
 
-        timeManager.startTimer(player.getUniqueId());
+        // Запускаємо таймер
+        timeManager.startTimer(uuid);
         
-        player.sendTitle(
-            "§6§lТаймер запущено!",
-            "§eЧекайте 15 годин...",
-            10, 70, 10
-        );
+        // Показуємо BossBar (потрібно мати доступ до TimeHardcore)
+        if (plugin instanceof TimeHardcore) {
+            TimeHardcore main = (TimeHardcore) plugin;
+            main.createBossBar(player, uuid);
+        }
         
-        player.sendMessage("§6§l=== TimeHardcore ===");
-        player.sendMessage("§a✓ Таймер запущено!");
-        player.sendMessage("§eПосле 15 годин онлайн → HARDCORE режим");
-        player.sendMessage("§4Смерть в HARDCORE → ПОСТІЙНИЙ БАН ☠");
-        player.sendMessage("§eКоманди: §f/playtime §eі §f/stoptimer");
-        player.sendMessage("§6§l==================");
+        // Красивое повідомлення
+        player.sendMessage("\n");
+        player.sendMessage("§2§l╔════════════════════════════════════════╗");
+        player.sendMessage("§2§l║ ✅ ТАЙМЕР ЗАПУЩЕНО! ✅ §r§2§l          ║");
+        player.sendMessage("§2§l╠════════════════════════════════════════╣");
+        player.sendMessage("§2§l║ §r§aТи маєш 15 годин на Hardcore!      §2§l║");
+        player.sendMessage("§2§l║ §r§cБез смерті можеш досягти!           §2§l║");
+        player.sendMessage("§2§l║ §r§eВ полосці вище видно прогрес      §2§l║");
+        player.sendMessage("§2§l║ §r§6Тип /playtime для перегляду часу   §2§l║");
+        player.sendMessage("§2§l╚════════════════════════════════════════╝");
+        player.sendMessage("\n");
 
+        Bukkit.broadcastMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        Bukkit.broadcastMessage("§6[TimeHardcore] §e" + player.getName() + " §aзапустив таймер!");
+        Bukkit.broadcastMessage("§6§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        plugin.getLogger().info("✅ Таймер запущено для гравця: " + player.getName());
+        
         return true;
+    }
+
+    private String formatTime(long seconds) {
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        return String.format("§a%d§7h §a%02d§7m §a%02d§7s", hours, minutes, secs);
     }
 }
