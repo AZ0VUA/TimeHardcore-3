@@ -6,16 +6,19 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.Map;
 import java.util.UUID;
 
 public class PlaytimeCommand implements CommandExecutor {
 
     private final TimeManager timeManager;
     private final long hardcoreThreshold;
+    private final Map<UUID, Long> hardcoreStartTime;
 
-    public PlaytimeCommand(TimeManager timeManager, long hardcoreThreshold) {
+    public PlaytimeCommand(TimeManager timeManager, long hardcoreThreshold, Map<UUID, Long> hardcoreStartTime) {
         this.timeManager = timeManager;
         this.hardcoreThreshold = hardcoreThreshold;
+        this.hardcoreStartTime = hardcoreStartTime;
     }
 
     @Override
@@ -74,7 +77,12 @@ public class PlaytimeCommand implements CommandExecutor {
         sender.sendMessage("§6§l║ §r");
         
         if (isHardcore) {
+            long hardcoreTime = hardcoreStartTime.getOrDefault(uuid, 0L);
+            long daysSurvived = (System.currentTimeMillis() - hardcoreTime) / (24 * 60 * 1000);
+            
             sender.sendMessage("§6§l║ §r§4§l☠ Статус: HARDCORE РЕЖИМ! ☠");
+            sender.sendMessage("§6§l║ §r§4Режим: §cSURVIVAL на HARD складності");
+            sender.sendMessage("§6§l║ §r§4Дні вижити: §6" + daysSurvived + " §e(вижив!)");
             sender.sendMessage("§6§l║ §r§c⚠ СМЕРТЬ = ПОСТІЙНИЙ БАН!");
         } else {
             sender.sendMessage("§6§l║ §r§aСтатус: §2Звичайний режим");
